@@ -3,10 +3,10 @@ config :ash, policies: [show_policy_breakdowns?: true]
 
 # Configure your database
 config :new_project, NewProject.Repo,
-  username: "postgres",
-  password: "postgres",
-  hostname: "localhost",
-  database: "new_project_dev",
+  username: System.get_env("DB_USERNAME") || "postgres",
+  password: System.get_env("DB_PASSWORD") || "postgres",
+  hostname: System.get_env("DB_HOSTNAME") || "localhost",
+  database: System.get_env("DB_NAME") || "new_project_dev",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
@@ -87,3 +87,7 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+config :live_debugger,
+  enabled: true,
+  port: 4008
