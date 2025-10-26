@@ -90,4 +90,4 @@ config :swoosh, :api_client, false
 
 config :live_debugger,
   enabled: true,
-  port: 4008
+  port: String.to_integer(System.get_env("LIVE_DEBUGGER_PORT") || "4008")
