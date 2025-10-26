@@ -1,172 +1,166 @@
-defmodule Mix.Tasks.Project.Setup.Docs do
-  @moduledoc false
-  def short_doc, do: "Complete project setup with environment variables and configuration"
-  def example, do: "mix project.setup"
+defmodule Mix.Tasks.Project.Setup do
+  @moduledoc """
+  Complete project setup after igniter.new
   
-  def long_doc do
-    """
-    #{short_doc()}
-
-    This task configures a new Phoenix/LiveView/Ash project with:
-    - Cldr module (required for ex_money)
-    - Environment variables for database in config/dev.exs
-    - LiveDebugger port configuration
-    - .env.example file
-    - .tool-versions file
-    - .gitignore updates for .env files
-
-    ## Example
-
-    ```sh
-    #{example()}
-    ```
-
-    Run this after creating a project with `mix igniter.new` (without --setup flag).
-    """
+  This task:
+  1. Configures environment variables in config/dev.exs
+  2. Creates .env.example file
+  3. Adds .tool-versions file
+  4. Updates .gitignore
+  5. Syncs usage rules
+  6. Creates and migrates database
+  
+  ## Usage
+  
+      mix project.setup
+  
+  After running igniter.new without --setup, run this task to complete setup.
+  """
+  
+  use Mix.Task
+  
+  @shortdoc "Complete project setup after igniter.new"
+  
+  def run(_args) do
+    Mix.shell().info("Setting up project...")
+    
+    configure_dev_env_vars()
+    create_env_example()
+    create_tool_versions()
+    update_gitignore()
+    sync_usage_rules()
+    setup_database()
+    
+    Mix.shell().info("")
+    Mix.shell().info("Project setup complete!")
+    Mix.shell().info("")
+    Mix.shell().info("Next steps:")
+    Mix.shell().info("1. Copy .env.example to .env and configure your credentials")
+    Mix.shell().info("2. Run: source .env")
+    Mix.shell().info("3. Run: mix phx.server")
   end
-end
-
-if Code.ensure_loaded?(Igniter) do
-  defmodule Mix.Tasks.Project.Setup do
-    @shortdoc "#{__MODULE__.Docs.short_doc()}"
-    @moduledoc __MODULE__.Docs.long_doc()
-    use Igniter.Mix.Task
-
-    def info(_argv, _composing_task) do
-      %Igniter.Mix.Task.Info{
-        group: :project,
-        # Compose usage_rules.sync if needed
-        composes: []
-      }
-    end
-
-    def igniter(igniter) do
-      app_name = Igniter.Project.Application.app_name(igniter)
-      cldr_module = Igniter.Project.Module.module_name(igniter, "Cldr")
-      has_ex_cldr = Igniter.Project.Deps.has_dep?(igniter, :ex_cldr)
-
-      igniter
-      |> maybe_create_cldr_module(cldr_module, has_ex_cldr)
-      |> maybe_configure_cldr_backend(cldr_module, has_ex_cldr)
-      |> configure_database_env_vars(app_name)
-      |> configure_live_debugger_port()
-      |> create_env_example(app_name)
-      |> create_tool_versions()
-      |> update_gitignore()
-    end
-
-    defp maybe_create_cldr_module(igniter, _cldr_module, false), do: igniter
+  
+  defp configure_dev_env_vars do
+    Mix.shell().info("Configuring environment variables in config/dev.exs...")
     
-    defp maybe_create_cldr_module(igniter, cldr_module, true) do
-      Igniter.Project.Module.find_and_update_or_create_module(
-        igniter,
-        cldr_module,
-        """
-        use Cldr,
-          locales: ["en"],
-          default_locale: "en"
-        """,
-        fn zipper -> {:ok, zipper} end
-      )
-    end
-
-    defp maybe_configure_cldr_backend(igniter, _cldr_module, false), do: igniter
+    dev_config_path = "config/dev.exs"
+    {:ok, content} = File.read(dev_config_path)
     
-    defp maybe_configure_cldr_backend(igniter, cldr_module, true) do
-      Igniter.Project.Config.configure_new(
-        igniter,
-        "config.exs",
-        :ex_cldr,
-        [:default_backend],
-        cldr_module
-      )
-    end
-
-    defp configure_database_env_vars(igniter, app_name) do
-      app_module = Igniter.Project.Module.module_name(igniter, "")
-      repo_module = Module.concat(app_module, Repo)
-
-      igniter
-      |> Igniter.Project.Config.configure(
-        "dev.exs",
-        app_name,
-        [repo_module, :username],
-        {:code, Sourceror.parse_string!(~s[System.get_env("DB_USERNAME") || "postgres"])}
-      )
-      |> Igniter.Project.Config.configure(
-        "dev.exs",
-        app_name,
-        [repo_module, :password],
-        {:code, Sourceror.parse_string!(~s[System.get_env("DB_PASSWORD") || "postgres"])}
-      )
-      |> Igniter.Project.Config.configure(
-        "dev.exs",
-        app_name,
-        [repo_module, :hostname],
-        {:code, Sourceror.parse_string!(~s[System.get_env("DB_HOSTNAME") || "localhost"])}
-      )
-      |> Igniter.Project.Config.configure(
-        "dev.exs",
-        app_name,
-        [repo_module, :database],
-        {:code, Sourceror.parse_string!(~s[System.get_env("DB_NAME") || "#{app_name}_dev"])}
-      )
-    end
-
-    defp configure_live_debugger_port(igniter) do
-      igniter
-      |> Igniter.Project.Config.configure_new(
-        "dev.exs",
-        :live_debugger,
-        [:enabled],
-        true
-      )
-      |> Igniter.Project.Config.configure_new(
-        "dev.exs",
-        :live_debugger,
-        [:port],
-        {:code, Sourceror.parse_string!(~s[String.to_integer(System.get_env("LIVE_DEBUGGER_PORT") || "4008")])}
-      )
-    end
-
-    defp create_env_example(igniter, app_name) do
-      content = """
-      # Development environment variables
-      # Copy this file to .env and customize for your local environment
-
-      # Port for the Phoenix server (default: 4000)
-      # Use different ports for different projects to run them simultaneously
-      export PORT=4001
-
-      # LiveDebugger port (default: 4008)
-      export LIVE_DEBUGGER_PORT=4009
-
-      # Database configuration (defaults to postgres/postgres/localhost if not set)
-      # export DB_USERNAME=postgres
-      # export DB_PASSWORD=postgres
-      # export DB_HOSTNAME=localhost
-      # export DB_NAME=#{app_name}_dev
+    app_name = Mix.Project.config()[:app]
+    app_module = Macro.camelize(to_string(app_name))
+    
+    updated_content = content
+    |> replace_db_config(app_name, app_module)
+    |> replace_port_config()
+    |> replace_live_debugger_config()
+    
+    File.write!(dev_config_path, updated_content)
+    Mix.shell().info("✓ Updated config/dev.exs")
+  end
+  
+  defp replace_db_config(content, app_name, app_module) do
+    db_regex = ~r/config :#{app_name}, #{app_module}\.Repo,\s+username: "[^"]*",\s+password: "[^"]*",\s+hostname: "[^"]*",\s+database: "[^"]*",/
+    
+    replacement = """
+    config :#{app_name}, #{app_module}.Repo,
+      username: System.get_env("DB_USERNAME") || "postgres",
+      password: System.get_env("DB_PASSWORD") || "postgres",
+      hostname: System.get_env("DB_HOSTNAME") || "localhost",
+      database: System.get_env("DB_NAME") || "#{app_name}_dev",
+    """
+    |> String.trim_trailing()
+    
+    String.replace(content, db_regex, replacement)
+  end
+  
+  defp replace_port_config(content) do
+    port_regex = ~r/port: \d+/
+    replacement = "port: String.to_integer(System.get_env(\"PORT\") || \"4000\")"
+    
+    String.replace(content, port_regex, replacement)
+  end
+  
+  defp replace_live_debugger_config(content) do
+    if String.contains?(content, "config :live_debugger") do
+      debugger_regex = ~r/config :live_debugger,\s+enabled: true,\s+port: \d+/
+      
+      replacement = """
+      config :live_debugger,
+        enabled: true,
+        port: String.to_integer(System.get_env("LIVE_DEBUGGER_PORT") || "4008")
       """
-
-      Igniter.create_new_file(igniter, ".env.example", content)
+      |> String.trim()
+      
+      String.replace(content, debugger_regex, replacement)
+    else
+      content
     end
-
-    defp create_tool_versions(igniter) do
-      Igniter.create_new_file(igniter, ".tool-versions", "ruby 3.3.6\n")
+  end
+  
+  defp create_env_example do
+    Mix.shell().info("Creating .env.example...")
+    
+    app_name = Mix.Project.config()[:app]
+    
+    content = """
+    # Development environment variables
+    # Copy this file to .env and customize for your local environment
+    
+    # Port for the Phoenix server (default: 4000)
+    # Use different ports for different projects to run them simultaneously
+    export PORT=4001
+    
+    # LiveDebugger port (default: 4008)
+    export LIVE_DEBUGGER_PORT=4009
+    
+    # Database configuration (defaults to postgres/postgres/localhost if not set)
+    # export DB_USERNAME=postgres
+    # export DB_PASSWORD=postgres
+    # export DB_HOSTNAME=localhost
+    # export DB_NAME=#{app_name}_dev
+    """
+    
+    File.write!(".env.example", content)
+    Mix.shell().info("✓ Created .env.example")
+  end
+  
+  defp create_tool_versions do
+    Mix.shell().info("Creating .tool-versions...")
+    
+    content = "ruby 3.3.6\n"
+    File.write!(".tool-versions", content)
+    Mix.shell().info("✓ Created .tool-versions")
+  end
+  
+  defp update_gitignore do
+    Mix.shell().info("Updating .gitignore...")
+    
+    {:ok, content} = File.read(".gitignore")
+    
+    if String.contains?(content, ".env") do
+      Mix.shell().info("✓ .gitignore already contains .env entries")
+    else
+      updated_content = content <> "\n# Environment variables\n.env\n.envrc\n"
+      File.write!(".gitignore", updated_content)
+      Mix.shell().info("✓ Updated .gitignore")
     end
-
-    defp update_gitignore(igniter) do
-      Igniter.update_file(igniter, ".gitignore", fn zipper ->
-        source = Sourceror.Zipper.node(zipper) |> Sourceror.to_string()
-
-        if String.contains?(source, ".env") do
-          {:ok, zipper}
-        else
-          updated_source = source <> "\n# Environment variables\n.env\n.envrc\n"
-          new_quoted = Sourceror.parse_string!(updated_source)
-          {:ok, Sourceror.Zipper.replace(zipper, new_quoted)}
-        end
-      end)
-    end
+  end
+  
+  defp sync_usage_rules do
+    Mix.shell().info("Syncing usage rules...")
+    Mix.Task.run("usage_rules.sync", [
+      "AGENTS.md",
+      "--all",
+      "--inline", "usage_rules:all",
+      "--link-to-folder", "deps"
+    ])
+    Mix.shell().info("✓ Synced usage rules")
+  end
+  
+  defp setup_database do
+    Mix.shell().info("")
+    Mix.shell().info("Note: Database setup requires credentials to be configured.")
+    Mix.shell().info("After creating .env with your credentials, run:")
+    Mix.shell().info("  source .env && mix ecto.create && mix ecto.migrate")
   end
 end
