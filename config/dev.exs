@@ -3,8 +3,8 @@ config :ash, policies: [show_policy_breakdowns?: true]
 
 # Configure your database
 config :new_project, NewProject.Repo,
-  username: System.get_env("DB_USERNAME") || "postgres",
-  password: System.get_env("DB_PASSWORD") || "postgres",
+  username: System.get_env("DB_USERNAME") || "vince",
+  password: System.get_env("DB_PASSWORD") || "vince",
   hostname: System.get_env("DB_HOSTNAME") || "localhost",
   database: System.get_env("DB_NAME") || "new_project_dev",
   stacktrace: true,
